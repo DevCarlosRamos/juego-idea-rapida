@@ -1,129 +1,62 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Juego Simple</title>
+  <title>Juego WebSocket</title>
   <style>
-    canvas {
-      background: #222;
-      display: block;
-      margin: 0 auto;
-      border: 2px solid #fff;
-    }
-    body {
-      color: white;
-      text-align: center;
-      font-family: sans-serif;
-      margin-top: 10px;
-    }
-    #loginContainer {
-      margin-top: 100px;
-    }
-    #gameContainer {
-      display: none;
-    }
+    canvas { background: #111; display: block; margin: auto; border: 1px solid white; }
   </style>
 </head>
 <body>
-  <div id="loginContainer">
-    <h2>Ingresa tu nombre para jugar</h2>
-    <input type="text" id="playerName" placeholder="Tu nombre">
-    <button onclick="startGame()">Jugar</button>
-    <p id="errorMsg" style="color: red;"></p>
-  </div>
+<canvas id="game" width="500" height="500"></canvas>
+<script>
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
 
-  <div id="gameContainer">
-    <h2>Nivel actual: <span id="level">1</span></h2>
-    <h3>Monstruos derrotados: <span id="kills">0</span></h3>
-    <canvas id="gameCanvas" width="500" height="500"></canvas>
-  </div>
+  const socket = new WebSocket("ws://localhost:3000");
+  let id = null;
+  let players = {};
 
-  <script>
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
+  socket.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
 
-    const player = { x: 50, y: 50, size: 30, color: "red", speed: 5, level: 1, name: "" };
-    const monster = { x: 200, y: 200, size: 30, color: "green", level: 1, name: "Monstruo" };
-    let kills = 0;
-
-    function drawSquare(obj) {
-      ctx.fillStyle = obj.color;
-      ctx.fillRect(obj.x, obj.y, obj.size, obj.size);
-      ctx.fillStyle = "white";
-      ctx.font = "12px sans-serif";
-      if (obj === player) {
-        ctx.fillText(obj.name, obj.x, obj.y - 10);
-        ctx.fillText("Lv " + obj.level, obj.x, obj.y + obj.size + 12);
-      } else {
-        ctx.fillText(obj.name, obj.x, obj.y - 10);
-        ctx.fillText("Lv " + obj.level, obj.x, obj.y + obj.size + 12);
-      }
+    if (msg.type === 'init') {
+      id = msg.id;
+      players = msg.players;
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawSquare(player);
-      drawSquare(monster);
+    if (msg.type === 'update') {
+      if (!players[msg.id]) players[msg.id] = {};
+      players[msg.id].x = msg.x;
+      players[msg.id].y = msg.y;
     }
 
-    function updateLevel() {
-      kills++;
-      player.level += monster.level;
-      document.getElementById("level").textContent = player.level;
-      document.getElementById("kills").textContent = kills;
-      monster.x = Math.random() * (canvas.width - monster.size);
-      monster.y = Math.random() * (canvas.height - monster.size);
-      monster.level = Math.floor(Math.random() * 100) + 1;
+    if (msg.type === 'remove') {
+      delete players[msg.id];
     }
 
-    function checkCollision(a, b) {
-      return (
-        a.x < b.x + b.size &&
-        a.x + a.size > b.x &&
-        a.y < b.y + b.size &&
-        a.y + a.size > b.y
-      );
+    draw();
+  };
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const [pid, p] of Object.entries(players)) {
+      ctx.fillStyle = p.color || "white";
+      ctx.fillRect(p.x, p.y, 30, 30);
     }
+  }
 
-    document.addEventListener("keydown", function (e) {
-      if (document.getElementById("gameContainer").style.display === "none") return;
-
-      switch (e.key) {
-        case "ArrowUp": player.y -= player.speed; break;
-        case "w": player.y -= player.speed; break;
-        case "ArrowDown": player.y += player.speed; break;
-        case "s": player.y += player.speed; break;
-        case "ArrowLeft": player.x -= player.speed; break;
-        case "a": player.x -= player.speed; break;
-        case "ArrowRight": player.x += player.speed; break;
-        case "d": player.x += player.speed; break;  
-      }
-
-      player.x = Math.max(0, Math.min(player.x, canvas.width - player.size));
-      player.y = Math.max(0, Math.min(player.y, canvas.height - player.size));
-
-      if (checkCollision(player, monster)) {
-        updateLevel();
-      }
-
-      draw();
-    });
-
-    function startGame() {
-      const name = document.getElementById("playerName").value.trim();
-      const errorMsg = document.getElementById("errorMsg");
-
-      if (name === "") {
-        errorMsg.textContent = "¡Debes ingresar un nombre para jugar!";
-        return;
-      }
-
-      player.name = name;
-      document.getElementById("loginContainer").style.display = "none";
-      document.getElementById("gameContainer").style.display = "block";
-      errorMsg.textContent = "";
-      draw();
+  document.addEventListener('keydown', (e) => {
+    if (!players[id]) return;
+    const p = players[id];
+    switch (e.key) {
+      case 'ArrowUp': p.y -= 5; break;
+      case 'ArrowDown': p.y += 5; break;
+      case 'ArrowLeft': p.x -= 5; break;
+      case 'ArrowRight': p.x += 5; break;
     }
-  </script>
+    socket.send(JSON.stringify({ type: 'move', x: p.x, y: p.y }));
+    draw();
+  });
+</script>
 </body>
 </html>
