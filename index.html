@@ -1,62 +1,148 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <title>Juego WebSocket</title>
+  <meta charset="UTF-8" />
+  <title>Juego Multijugador con Chat</title>
   <style>
-    canvas { background: #111; display: block; margin: auto; border: 1px solid white; }
+    body {
+      background: #000;
+      color: white;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    #container {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      margin-top: 20px;
+    }
+    canvas {
+      background: #111;
+      border: 1px solid white;
+    }
+    #chat {
+      margin-left: 20px;
+      width: 250px;
+      height: 500px;
+      display: flex;
+      flex-direction: column;
+    }
+    #messages {
+      flex: 1;
+      background: #222;
+      color: white;
+      padding: 5px;
+      overflow-y: auto;
+      border: 1px solid white;
+      font-size: 14px;
+    }
+    #input {
+      display: flex;
+      margin-top: 5px;
+    }
+    #msgInput {
+      flex: 1;
+      padding: 5px;
+      font-size: 14px;
+    }
+    button {
+      padding: 5px 10px;
+      background: #333;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #555;
+    }
   </style>
 </head>
 <body>
-<canvas id="game" width="500" height="500"></canvas>
-<script>
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+  <div id="container">
+    <canvas id="game" width="500" height="500"></canvas>
+    <div id="chat">
+      <div id="messages"></div>
+      <div id="input">
+        <input type="text" id="msgInput" placeholder="Mensaje..." />
+        <button onclick="sendMessage()">Enviar</button>
+      </div>
+    </div>
+  </div>
 
-  const socket = new WebSocket("ws://localhost:3000");
-  let id = null;
-  let players = {};
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const socket = new WebSocket("ws://localhost:3000");
 
-  socket.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
+    let id = null;
+    let players = {};
 
-    if (msg.type === 'init') {
-      id = msg.id;
-      players = msg.players;
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let pid in players) {
+        const p = players[pid];
+        ctx.fillStyle = pid === id ? "red" : "green";
+        ctx.fillRect(p.x, p.y, 30, 30);
+        ctx.fillStyle = "white";
+        ctx.font = "12px sans-serif";
+        ctx.fillText("Jugador " + pid, p.x, p.y - 5);
+      }
     }
 
-    if (msg.type === 'update') {
-      if (!players[msg.id]) players[msg.id] = {};
-      players[msg.id].x = msg.x;
-      players[msg.id].y = msg.y;
-    }
+    document.addEventListener("keydown", (e) => {
+      if (!id) return;
+      const player = players[id];
+      if (!player) return;
 
-    if (msg.type === 'remove') {
-      delete players[msg.id];
-    }
+      if (e.key === "ArrowUp") player.y -= 5;
+      if (e.key === "ArrowDown") player.y += 5;
+      if (e.key === "ArrowLeft") player.x -= 5;
+      if (e.key === "ArrowRight") player.x += 5;
 
-    draw();
-  };
+      socket.send(
+        JSON.stringify({ type: "move", x: player.x, y: player.y })
+      );
+      draw();
+    });
 
-  function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const [pid, p] of Object.entries(players)) {
-      ctx.fillStyle = p.color || "white";
-      ctx.fillRect(p.x, p.y, 30, 30);
-    }
-  }
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
 
-  document.addEventListener('keydown', (e) => {
-    if (!players[id]) return;
-    const p = players[id];
-    switch (e.key) {
-      case 'ArrowUp': p.y -= 5; break;
-      case 'ArrowDown': p.y += 5; break;
-      case 'ArrowLeft': p.x -= 5; break;
-      case 'ArrowRight': p.x += 5; break;
+      if (msg.type === "init") {
+        id = msg.id;
+        players = msg.players;
+      }
+
+      if (msg.type === "update") {
+        if (!players[msg.id]) players[msg.id] = {};
+        players[msg.id].x = msg.x;
+        players[msg.id].y = msg.y;
+      }
+
+      if (msg.type === "remove") {
+        delete players[msg.id];
+      }
+
+      if (msg.type === "chat") {
+        const messages = document.getElementById("messages");
+        const el = document.createElement("div");
+        el.textContent = `Jugador ${msg.id}: ${msg.message}`;
+        messages.appendChild(el);
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+      draw();
+    };
+
+    function sendMessage() {
+      const input = document.getElementById("msgInput");
+      const text = input.value.trim();
+      if (text !== "") {
+        socket.send(JSON.stringify({ type: "chat", message: text }));
+        input.value = "";
+      }
     }
-    socket.send(JSON.stringify({ type: 'move', x: p.x, y: p.y }));
-    draw();
-  });
-</script>
+  </script>
 </body>
 </html>
